@@ -1,25 +1,25 @@
 import pandas as pd
 from sodapy import Socrata
 
-client = Socrata("data.cityofchicago.org", "MY_PERSONAL_TOKEN")
+client = Socrata("data.cityofchicago.org", "")
 
 results = client.get(
     "ijzp-q8t2",
-    select="date, primary_type, description",
+    select="date, primary_type, description, location_description",
     limit=9000000
 )
 
 df = pd.DataFrame.from_records(results)
 
-df['timestamp'] = pd.to_datetime(df['date'], utc=True)
-df['timestamp_london'] = df['timestamp'].dt.tz_convert('Europe/London')
+df['timestamp'] = pd.to_datetime(df['date'])
 
-df['year']        = df['timestamp_london'].dt.year
-df['weekOfYear']  = df['timestamp_london'].dt.isocalendar().week.astype(int)
-df['weekday']     = df['timestamp_london'].dt.dayofweek   # 0 = Monday, 6 = Sunday
-df['hour']        = df['timestamp_london'].dt.hour
+df['year']        = df['timestamp'].dt.year
+df['weekOfYear']  = df['timestamp'].dt.isocalendar().week.astype(int)
+df['weekday']     = df['timestamp'].dt.dayofweek   # 0 = Monday, 6 = Sunday
+df['hour']        = df['timestamp'].dt.hour
 
 def map_crime_group(row):
+    loc = str(row.get('location_description', '')).upper()
     pt = row['primary_type']
     desc = row['description']
 
@@ -29,14 +29,18 @@ def map_crime_group(row):
         return 'Person theft'
     if pt == 'THEFT' and desc == 'RETAIL THEFT':
         return 'Commercial theft'
-    if pt == 'BURGLARY':
+    if pt == 'BURGLARY' and loc in ['APARTMENT', 'RESIDENCE', 'RESIDENCE - PORCH / HALLWAY']:
         return 'Residential/Property theft'
+    if pt == 'BURGLARY' and loc not in ['APARTMENT', 'RESIDENCE', 'RESIDENCE - PORCH / HALLWAY']:
+        return 'Commercial theft'
     if pt == 'MOTOR VEHICLE THEFT' and desc not in [
         'THEFT / RECOVERY - AUTOMOBILE',
         'THEFT / RECOVERY - TRUCK, BUS, MOBILE HOME',
         'THEFT / RECOVERY - CYCLE, SCOOTER, BIKE WITH VIN',
         'THEFT / RECOVERY - CYCLE, SCOOTER, BIKE NO VIN'
     ]:
+        return 'Vehicles'
+    if pt == 'VEHICULAR HIJACKING':
         return 'Vehicles'
     if pt == 'NARCOTICS':
         return 'Illegal items'
@@ -77,7 +81,11 @@ def map_crime_group(row):
         'AGGRAVATED DOMESTIC BATTERY - OTHER DANGEROUS WEAPON',
         'AGG. DOMESTIC BATTERY - HANDS, FISTS, FEET, SERIOUS INJURY',
         'AGGRAVATED OF A CHILD',
-        'AGGRAVATED OF A SENIOR CITIZEN'
+        'AGGRAVATED OF A SENIOR CITIZEN',
+        'AGGRAVATED P.O. - HANDS, FISTS, FEET, NO INJURY',
+        'AGGRAVATED P.O. - HANDS, FISTS, FEET, SERIOUS INJURY',
+        'PROT EMP - HANDS, FISTS, FEET, NO / MINOR INJURY',
+        'AGG. PROTECTED EMPLOYEE - HANDS, FISTS, FEET, SERIOUS INJURY'
     ]:
         return 'Violence'
     if pt == 'ASSAULT' and desc in [
